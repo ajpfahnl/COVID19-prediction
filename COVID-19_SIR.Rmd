@@ -1,5 +1,5 @@
 ---
-title: "COVID-19 ARIMA Model"
+title: "COVID-19 ARIMA and SIR Model"
 knit: (function(input_file, encoding) {
   out_dir <- 'docs';
   rmarkdown::render(input_file,
@@ -14,8 +14,13 @@ library(tidyr)
 library(dplyr)
 library(reshape2)
 
+# For ARIMA
 library(astsa)
 library(forecast)
+
+# For SIR
+library(deSolve)
+library(dfoptim)
 ```
 Import data
 ```{r}
@@ -37,6 +42,7 @@ cases_US 		<- import_data("data/US_Counties/US_county_covid_cases_data.csv")
 deaths_US 		<- import_data("data/US_Counties/US_county_covid_deaths_data.csv")
 ```
 # Plot Data
+## Total Cases Per Day
 ```{r}
 overall_df <- function(df) {
 	return(data.frame(days=seq(0,length(rownames(df))-1), 
@@ -57,6 +63,8 @@ overall_plot(cases_LA_overall, "Overall LA Cases")
 overall_plot(cases_US_overall, "Overall US Cases")
 overall_plot(cases_intl_overall, "Overall International Cases")
 ```
+
+## Locations Plotted Individually
 ```{r warning=FALSE}
 plot_all <- function(df, title, legend = FALSE) {
 	rownames(df) <- seq(0,length(rownames(df))-1)
@@ -75,7 +83,7 @@ max_counts <- function(df) {
 	return(m %>% group_by(Location) %>% slice_max(n=1, order_by=Count, with_ties = FALSE) %>% ungroup())
 }
 ```
-International Cases
+
 ```{r}
 plot_all(cases_intl, "International Cases")
 cases_intl_max <- max_counts(cases_intl)
@@ -83,27 +91,27 @@ cases_intl_max <- cases_intl_max[order(cases_intl_max$Count, decreasing = TRUE),
 cases_intl_max
 ```
 
-US County Cases
+
 ```{r}
 plot_all(cases_US, "US County Cases")
 cases_US_max <- max_counts(cases_US)
 cases_US_max <- cases_US_max[order(cases_US_max$Count, decreasing = TRUE),]
 cases_US_max
 ```
-LA Cases
+
 ```{r}
 plot_all(cases_LA, "LA Cases")
 cases_LA_max <- max_counts(cases_LA)
 cases_LA_max <- cases_LA_max[order(cases_LA_max$Count, decreasing = TRUE),]
 cases_LA_max
 ```
-# Locations with Most COVID-19 Cases and Other Selected Plots
-International Cases
+
+## Locations with Most COVID-19 Cases and Other Selected Plots
+
 ```{r}
 plot_all(select(cases_intl, cases_intl_max$Location[1:10]), "International Cases Top 10", legend=TRUE)
 ```
 
-US County Cases
 ```{r}
 plot_all(select(cases_US, cases_US_max$Location[1:10]), "US County Cases Top 10", legend=TRUE)
 
@@ -113,35 +121,153 @@ plot_all(select(cases_US, cases_US_max$Location[1:10]), "US County Cases Top 10"
 # Los Angeles
 # plot_all(select(cases_US, `Los Angeles, California`), "Los Angeles, California")
 ```
-LA Cases
 ```{r}
 plot_all(select(cases_LA, cases_LA_max$Location[1:10]), "LA Cases Top 10", legend=TRUE)
 ```
 
-# Analyze as Time Series Data with ARIMA
+# Analyze with ARIMA
 ```{r}
-# using Suffolk, New York as our training dataset
-
-timeseries=cases_US$`Suffolk, New York`
-
-plot.ts(timeseries)
-plot.ts(diff(timeseries))
-acf(diff(timeseries))
+arima_wrap <- function(df, location, percentage = 0.7, verbose = TRUE) {
+	timeseries = unlist(as.list(select(df, location)))
+	if(verbose) {
+		plot.ts(timeseries)
+		plot.ts(diff(timeseries))
+		acf(diff(timeseries))
+	}
+	
+	train_series <- timeseries[1:length(timeseries)*percentage]
+	test_series <- timeseries[-1:-length(timeseries)*percentage]
+	
+	# parametrize model
+	AutoArimaModel=auto.arima(train_series)
+	AutoArimaModel
+	
+	# train
+	futurVal <- forecast(AutoArimaModel,h=10, level=c(99.5)) 
+	futurVal <- forecast(AutoArimaModel,h=50, level=c(80)) #adjust timesteps ahead, and confidence level
+	
+	checkresiduals(AutoArimaModel)
+	plot(futurVal)
+	return(futurVal)
+}
 ```
 
 ```{r}
-percentage = 0.7
-train_series <- timeseries[1:length(timeseries)*percentage]
-test_series <- timeseries[-1:-length(timeseries)*percentage]
-
-# parametrize model
-AutoArimaModel=auto.arima(train_series)
-AutoArimaModel
-
-# train
-futurVal <- forecast(AutoArimaModel,h=10, level=c(99.5)) 
-futurVal <- forecast(AutoArimaModel,h=50, level=c(80)) #adjust timesteps ahead, and confidence level
-plot(futurVal)
-checkresiduals(AutoArimaModel)
+futurSuffolk <- arima_wrap(cases_US, "Suffolk, New York")
 ```
+```{r}
+futurLA <- arima_wrap(cases_LA_overall, "cases")
+```
+```{r}
+futurUS <- arima_wrap(cases_US_overall, "cases")
+```
+```{r}
+futurIntl <- arima_wrap(cases_intl_overall, "cases")
+```
+
+
+```{r}
+forecasts = c(2,7,30)
+futur <- list(futurSuffolk$mean[forecasts], futurUS$mean[forecasts], futurLA$mean[forecasts], futurIntl$mean[forecasts])
+futur <- data.frame(matrix(unlist(futur), nrow=length(futur), byrow=T),stringsAsFactors=FALSE)
+rownames(futur) <- c("Suffolk, New York", "All LA Cities", "All US Counties", "All International")
+colnames(futur) <- c("2 Days", "1 Week", "1 Month")
+futur
+```
+
+
+
+# Analyze with SIR
+```{r}
+Infected <- cases_US$`Los Angeles, California`[-1:-25] # Suffolk, New York
+Days <- seq(1,length(Infected))
+
+#plot(Days, Infected)
+
+SIR <- function(time, state, parameters) {
+  par <- as.list(c(state, parameters))
+  with(par, {
+    dS <- -beta * I * S / N
+    dI <- beta * I * S / N - gamma * I
+    dR <- gamma * I
+    list(c(dS, dI, dR))
+  })
+}
+
+N <- 3.99e6 #1.477e6
+init <- c(
+  S = N - Infected[1],
+  I = Infected[1],
+  R = 0
+)
+
+# define a function to calculate the residual sum of squares
+# (RSS), passing in parameters beta and gamma that are to be
+# optimised for the best fit to the incidence data
+RSS <- function(parameters) {
+  names(parameters) <- c("beta", "gamma")
+  out <- ode(y = init, times = Days, func = SIR, parms = parameters)
+  fit <- out[, 3]
+  sum((Infected - fit)^2)
+}
+```
+
+```{r}
+# now find the values of beta and gamma that give the
+# smallest RSS, which represents the best fit to the data.
+# Start with values of 0.5 for each, and constrain them to
+# the interval 0 to 1.0
+
+lower = c(0, 0)
+upper = c(1, 1)
+
+Opt <- optim(c(0.5, 0.5),
+  RSS,
+  method = "L-BFGS-B",
+  lower = lower,
+  upper = upper
+)
+Opt$message
+
+# Opt <-nmkb(c(0.5, 0.5), RSS, lower=lower, upper=upper)
+# Opt$message
+
+# library(Rvmmin)
+# Opt <- Rvmmin(c(0.5, 0.5), RSS, lower=lower, upper=upper)
+# Opt$message
+
+Opt_par <- setNames(Opt$par, c("beta", "gamma"))
+Opt_par
+```
+```{r}
+Opt_par[1] = 0.38
+Opt_par[2] = 0.29
+# get the fitted values from our SIR model
+fitted_cumulative_incidence <- data.frame(ode(
+  y = init, times = Days,
+  func = SIR, parms = Opt_par
+))
+
+fitted_cumulative_incidence <- fitted_cumulative_incidence %>%
+  mutate(
+    cumulative_incident_cases = Infected
+  )
+
+fitted_cumulative_incidence %>%
+  ggplot(aes(x = time)) +
+  geom_line(aes(y = I), colour = "red") +
+  geom_point(aes(y = cumulative_incident_cases), colour = "blue") +
+  labs(
+    y = "Cumulative incidence",
+    title = "COVID-19 fitted vs observed cumulative incidence, Los Angeles, California",
+    subtitle = "(Red = fitted from SIR model, blue = observed)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+R0 <- as.numeric(Opt_par[1] / Opt_par[2])
+R0
+```
+
 
