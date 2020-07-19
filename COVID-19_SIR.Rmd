@@ -1,5 +1,5 @@
 ---
-title: "COVID-19 SIR Model"
+title: "COVID-19 ARIMA Model"
 knit: (function(input_file, encoding) {
   out_dir <- 'docs';
   rmarkdown::render(input_file,
@@ -118,7 +118,7 @@ LA Cases
 plot_all(select(cases_LA, cases_LA_max$Location[1:10]), "LA Cases Top 10", legend=TRUE)
 ```
 
-# Analyze as Time Series Data
+# Analyze as Time Series Data with ARIMA
 ```{r}
 # using Suffolk, New York as our training dataset
 
