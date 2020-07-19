@@ -13,6 +13,9 @@ library(ggplot2)
 library(tidyr)
 library(dplyr)
 library(reshape2)
+
+library(astsa)
+library(forecast)
 ```
 Import data
 ```{r}
@@ -55,12 +58,12 @@ overall_plot(cases_US_overall, "Overall US Cases")
 overall_plot(cases_intl_overall, "Overall International Cases")
 ```
 ```{r warning=FALSE}
-plot_all <- function(df, title) {
+plot_all <- function(df, title, legend = FALSE) {
 	rownames(df) <- seq(0,length(rownames(df))-1)
 	m <- melt(as.matrix(df))
 	colnames(m) <- c("Days", "Location", "Count")
-	ggplot(m, aes(x=Days, y=Count, color=Location)) + # 
-		geom_line(show.legend = FALSE) +
+	ggplot(m, aes(x=Days, y=Count, color=Location)) +
+		geom_line(show.legend = legend) +
 		scale_colour_viridis_d() +
 		ggtitle(title)
 }
@@ -91,14 +94,50 @@ plot_all(cases_LA, "LA Cases")
 cases_LA_max <- max_counts(cases_LA)
 cases_LA_max[order(cases_LA_max$Count, decreasing = TRUE),]
 ```
-
-
-# Isolate Good Plots
-US county plots
+# Locations with Most COVID-19 Cases and Other Selected Plots
+International Cases
 ```{r}
-plot_all(select(cases_US, `New York City, New York`), "New York City, New York")
-plot_all(select(cases_US, `Los Angeles, California`), "Los Angeles, California")
-plot_all(select(cases_US, `Suffolk, New York`), "Suffolk, New York")
-plot_all(select(cases_US, `Macomb, Michigan`), "Macomb, Michigan")
+plot_all(select(cases_intl, cases_intl_max$Location[1:10]), "International Cases Top 10", legend=TRUE)
+```
+
+US County Cases
+```{r}
+plot_all(select(cases_US, cases_US_max$Location[1:10]), "US County Cases Top 10", legend=TRUE)
+
+# locations with nice curves
+# plot_all(select(cases_US, `New York City, New York`, `Suffolk, New York`, `Cook, Illinois`), "US County Cases Selected Plots", legend = TRUE)
+
+# Los Angeles
+# plot_all(select(cases_US, `Los Angeles, California`), "Los Angeles, California")
+```
+LA Cases
+```{r}
+plot_all(select(cases_LA, cases_LA_max$Location[1:10]), "LA Cases Top 10", legend=TRUE)
+```
+
+# Analyze as Time Series Data
+```{r}
+# using Suffolk, New York as our training dataset
+
+timeseries=cases_US$`Suffolk, New York`
+
+plot.ts(timeseries)
+plot.ts(diff(timeseries))
+acf(diff(timeseries))
+```
+
+```{r}
+train_series <- timeseries[1:length(timeseries)*0.8]
+test_series <- timeseries[-1:-length(timeseries)*0.8]
+
+# parametrize model
+AutoArimaModel=auto.arima(train_series)
+AutoArimaModel
+
+# train
+futurVal <- forecast(AutoArimaModel,h=10, level=c(99.5)) 
+futurVal <- forecast(AutoArimaModel,h=50, level=c(80)) #adjust timesteps ahead, and confidence level
+plot(futurVal)
+checkresiduals(AutoArimaModel)
 ```
 
