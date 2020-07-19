@@ -79,20 +79,23 @@ International Cases
 ```{r}
 plot_all(cases_intl, "International Cases")
 cases_intl_max <- max_counts(cases_intl)
-cases_intl_max[order(cases_intl_max$Count, decreasing = TRUE),]
+cases_intl_max <- cases_intl_max[order(cases_intl_max$Count, decreasing = TRUE),]
+cases_intl_max
 ```
 
 US County Cases
 ```{r}
 plot_all(cases_US, "US County Cases")
 cases_US_max <- max_counts(cases_US)
-cases_US_max[order(cases_US_max$Count, decreasing = TRUE),]
+cases_US_max <- cases_US_max[order(cases_US_max$Count, decreasing = TRUE),]
+cases_US_max
 ```
 LA Cases
 ```{r}
 plot_all(cases_LA, "LA Cases")
 cases_LA_max <- max_counts(cases_LA)
-cases_LA_max[order(cases_LA_max$Count, decreasing = TRUE),]
+cases_LA_max <- cases_LA_max[order(cases_LA_max$Count, decreasing = TRUE),]
+cases_LA_max
 ```
 # Locations with Most COVID-19 Cases and Other Selected Plots
 International Cases
@@ -127,8 +130,9 @@ acf(diff(timeseries))
 ```
 
 ```{r}
-train_series <- timeseries[1:length(timeseries)*0.8]
-test_series <- timeseries[-1:-length(timeseries)*0.8]
+percentage = 0.7
+train_series <- timeseries[1:length(timeseries)*percentage]
+test_series <- timeseries[-1:-length(timeseries)*percentage]
 
 # parametrize model
 AutoArimaModel=auto.arima(train_series)
