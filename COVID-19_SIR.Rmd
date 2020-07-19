@@ -1,11 +1,14 @@
 ---
 title: "COVID-19 SIR Model"
-output: html_notebook
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
 ---
-
 # Setup
 Load libraries
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(ggplot2)
 library(tidyr)
 library(dplyr)
@@ -15,7 +18,7 @@ Import data
 ```{r}
 import_data <- function(file) {
 	df <- read.csv(file, header = FALSE, skip = 1)
-	locations <- as.matrix(df[-1,1])
+	locations <- as.matrix(df[,1])
 	dates <- as.matrix(read.csv(file, header = FALSE, nrows = 1)[1,-1])
 	df <- as.data.frame(t(df[,-1]))
 	rownames(df) <- dates
@@ -61,8 +64,41 @@ plot_all <- function(df, title) {
 		scale_colour_viridis_d() +
 		ggtitle(title)
 }
+
+max_counts <- function(df) {
+	rownames(df) <- seq(0,length(rownames(df))-1)
+	m <- melt(as.matrix(df))
+	colnames(m) <- c("Days", "Location", "Count")
+	return(m %>% group_by(Location) %>% slice_max(n=1, order_by=Count, with_ties = FALSE) %>% ungroup())
+}
+```
+International Cases
+```{r}
 plot_all(cases_intl, "International Cases")
+cases_intl_max <- max_counts(cases_intl)
+cases_intl_max[order(cases_intl_max$Count, decreasing = TRUE),]
+```
+
+US County Cases
+```{r}
 plot_all(cases_US, "US County Cases")
+cases_US_max <- max_counts(cases_US)
+cases_US_max[order(cases_US_max$Count, decreasing = TRUE),]
+```
+LA Cases
+```{r}
 plot_all(cases_LA, "LA Cases")
+cases_LA_max <- max_counts(cases_LA)
+cases_LA_max[order(cases_LA_max$Count, decreasing = TRUE),]
+```
+
+
+# Isolate Good Plots
+US county plots
+```{r}
+plot_all(select(cases_US, `New York City, New York`), "New York City, New York")
+plot_all(select(cases_US, `Los Angeles, California`), "Los Angeles, California")
+plot_all(select(cases_US, `Suffolk, New York`), "Suffolk, New York")
+plot_all(select(cases_US, `Macomb, Michigan`), "Macomb, Michigan")
 ```
 
