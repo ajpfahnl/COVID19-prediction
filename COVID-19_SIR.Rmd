@@ -8,6 +8,7 @@ knit: (function(input_file, encoding) {
 output:
   html_document:
     toc: true
+    df_print: paged
 ---
 # Setup
 Load libraries
@@ -171,7 +172,7 @@ futurIntl <- arima_wrap(cases_intl_overall, "cases")
 
 ```{r}
 forecasts = c(2,7,30)
-futur <- list(futurSuffolk$mean[forecasts], futurUS$mean[forecasts], futurLA$mean[forecasts], futurIntl$mean[forecasts])
+futur <- list(futurSuffolk$mean[forecasts], futurLA$mean[forecasts], futurUS$mean[forecasts], futurIntl$mean[forecasts])
 futur <- data.frame(matrix(unlist(futur), nrow=length(futur), byrow=T),stringsAsFactors=FALSE)
 rownames(futur) <- c("Suffolk, New York", "All LA Cities", "All US Counties", "All International")
 colnames(futur) <- c("2 Days", "1 Week", "1 Month")
